@@ -1,6 +1,8 @@
 var tls = require('tls'),
     crypto = require('crypto'),
     net = require('net'),
+    util = require('util'),
+    EventEmitter = require('events').EventEmitter,
     MultiplexStream = require('multiplex-stream');
 
 function Server(options) {
@@ -40,12 +42,28 @@ function Server(options) {
   });
     
   self.listen = function(port, callback) {
-    server.listen(port, callback);
+    if (callback) {
+      self.on('listening', callback);
+    }
+    server.on('listening', function() {
+      self.emit('listening');
+    });
+    server.on('error', function(error) {
+      self.emit('error', error);
+    });
+    server.listen(port);
   };
   
   self.close = function(callback) {
-    server.close(callback);
+    if (callback) {
+      self.on('close', callback);
+    }
+    server.on('close', function() {
+      self.emit('close');
+    });
+    server.close();
   };
 }
+util.inherits(Server, EventEmitter);
 
 module.exports = Server;
