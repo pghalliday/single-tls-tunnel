@@ -3,7 +3,7 @@ var tls = require('tls'),
     net = require('net'),
     MultiplexStream = require('multiplex-stream');
 
-function SingleTlsTunnel(options) {
+function Server(options) {
   var self = this,
       multiplex,
       clientConnected = false;
@@ -48,4 +48,4 @@ function SingleTlsTunnel(options) {
   };
 }
 
-module.exports = SingleTlsTunnel;
+module.exports = Server;

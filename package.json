@@ -21,7 +21,6 @@
       "url": "https://github.com/pghalliday/single-tls-tunnel/blob/master/LICENSE-MIT"
     }
   ],
-  "main": "src/SingleTlsTunnel.js",
   "engines": {
     "node": ">= 0.8.12"
   },

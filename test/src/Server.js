@@ -4,7 +4,7 @@ var expect = require('chai').expect,
     net = require('net'),
     Checklist = require('checklist'),
     MultiplexStream = require('multiplex-stream'),
-    SingleTlsTunnel = require('../../');
+    Server = require('../../src/Server');
 
 var PORT = 8080,
     SERVER_KEY = fs.readFileSync('./test/keys/server-key.pem'),
@@ -28,9 +28,9 @@ var CLIENT_OPTIONS = {
   rejectUnauthorized: true
 };
 
-describe('SingleTlsTunnel', function() {
+describe('Server', function() {
   it('should initially listen on the given port for TLS connections', function(done) {
-    var server = new SingleTlsTunnel(SERVER_OPTIONS);
+    var server = new Server(SERVER_OPTIONS);
     server.listen(PORT, function() {
       var client = tls.connect(CLIENT_OPTIONS, function() {
         client.on('end', function() {
@@ -44,7 +44,7 @@ describe('SingleTlsTunnel', function() {
   });
   
   describe('once a client is connected', function() {
-    var server = new SingleTlsTunnel(SERVER_OPTIONS),
+    var server = new Server(SERVER_OPTIONS),
         client,
         multiplex;
         
