@@ -1,2 +1,2 @@
 module.exports.Server = require('./Server');
-module.exports.Server = require('./Client');
+module.exports.Client = require('./Client');
