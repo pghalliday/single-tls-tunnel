@@ -7,7 +7,6 @@ var expect = require('chai').expect,
     Server = require('../../src/Server');
 
 var PORT = 8080,
-    INVALID_PORT = 1,
     SERVER_KEY = fs.readFileSync('./test/keys/server-key.pem'),
     SERVER_CERT = fs.readFileSync('./test/keys/server-cert.pem'),
     CLIENT_KEY = fs.readFileSync('./test/keys/client-key.pem'),
@@ -44,12 +43,17 @@ describe('Server', function() {
     });
   });
 
-  it('should emit an error if the TLS server cannot be opened', function(done) {
-    var server = new Server(SERVER_OPTIONS);
-    server.listen(INVALID_PORT);
-    server.on('error', function(error) {
-      expect(error.toString()).to.equal('Error: listen EACCES');
-      done();
+  it('should emit an error if the port is already in use', function(done) {
+    var server1 = new Server(SERVER_OPTIONS);
+    server1.listen(PORT, function() {
+      var server2 = new Server(SERVER_OPTIONS);
+      server2.listen(PORT);
+      server2.on('error', function(error) {
+        expect(error.toString()).to.equal('Error: listen EADDRINUSE');
+        server1.close(function() {
+          done();
+        });
+      });
     });
   });
   
