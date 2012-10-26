@@ -24,19 +24,7 @@ function Client(upstreamOptions, downstreamOptions) {
     request.on('error', function(error) {
       self.emit('error', error);
     });
-    request.end();
-
     request.on('upgrade', function(res, socket, upgradeHead) {
-      console.log('upgrade');
-
-      connection = socket;
-      connection.on('error', function(error) {
-        self.emit('error', error);
-      });
-      connection.on('end', function() {
-        self.emit('end');
-      });
-
       var securePair = tls.createSecurePair(
        crypto.createCredentials({
          key: upstreamOptions.key,
@@ -47,10 +35,19 @@ function Client(upstreamOptions, downstreamOptions) {
        true, // TODO: check what effect requireCert might have on a client connection (it's not a valid parameter for tls.connect so probably ignored here)
        upstreamOptions.rejectUnauthorized
       );
-      var cleartext = securePair.cleartext;
+      connection = securePair.cleartext;
       var encrypted = securePair.encrypted;
 
-      connection.pipe(encrypted).pipe(connection);
+      connection.on('error', function(error) {
+        connection = null;
+        self.emit('error', error);
+      });
+      connection.on('end', function() {
+        connection = null;
+        self.emit('end');
+      });
+
+      socket.pipe(encrypted).pipe(socket);
 
       var multiplexStream = new MultiplexStream(function(upstreamConnection) {
         var valve = new Valve(upstreamConnection, {paused: true});
@@ -64,13 +61,20 @@ function Client(upstreamOptions, downstreamOptions) {
         });
       });
 
-      cleartext.pipe(multiplexStream).pipe(cleartext);
+      connection.pipe(multiplexStream).pipe(connection);
 
-      if (callback) {
-        self.on('connect', callback);
-      }
-      self.emit('connect');
+      securePair.on('error', function(error) {
+        connection = null;
+        self.emit('error', error);
+      });
+      securePair.on('secure', function() {
+        if (callback) {
+          self.on('connect', callback);
+        }
+        self.emit('connect');
+      });
     });
+    request.end();
   };
   
   self.end = function() {

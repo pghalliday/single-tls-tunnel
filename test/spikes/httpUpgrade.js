@@ -90,6 +90,7 @@ httpServer.listen(PORT, function() {
 
     cleartext.on('end', function() {
       console.log('end client');
+      socket.destroy();
       httpServer.close(function() {
         console.log('finished');
       });

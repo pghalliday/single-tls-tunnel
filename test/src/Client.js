@@ -40,13 +40,14 @@ describe('Client', function() {
     var client = new Client(CLIENT_UPSTREAM_OPTIONS, CLIENT_DOWNSTREAM_OPTIONS);
     var checklist = new Checklist([
       'upgraded',
-      'end',
       'closed'
     ], done);
 
     var server = http.createServer();
     server.on('upgrade', function(req, socket, head) {
-      console.log('upgrade');
+      socket.on('end', function() {
+        socket.destroy();
+      });
       socket.write('HTTP/1.1 200\r\n' +
                    'Upgrade: TLS\r\n' +
                    'Connection: Upgrade\r\n' +
@@ -66,7 +67,10 @@ describe('Client', function() {
           encrypted = securePair.encrypted;
 
       socket.pipe(encrypted).pipe(socket);
-      checklist.check('upgraded');
+
+      securePair.on('secure', function() {
+        checklist.check('upgraded');
+      });
     });
 
     server.listen(UPSTREAM_PORT, function() {
@@ -81,7 +85,7 @@ describe('Client', function() {
     });
   });
   
-  it.skip('should emit an error when connection fails', function(done) {
+  it('should emit an error when connection fails', function(done) {
     var client = new Client(CLIENT_UPSTREAM_OPTIONS);
     client.connect();
     client.on('error', function(error) {
@@ -90,7 +94,7 @@ describe('Client', function() {
     });
   });
   
-  it.skip('should forward muliplexed streams from the upstream server to the downstream server', function(done) {
+  it('should forward muliplexed streams from the upstream server to the downstream server', function(done) {
     var client = new Client(CLIENT_UPSTREAM_OPTIONS, CLIENT_DOWNSTREAM_OPTIONS);
     var checklist = new Checklist([
       'connection',
@@ -99,21 +103,48 @@ describe('Client', function() {
       'end',
       'closed'
     ], done);
-    var upstreamServer = tls.createServer(SERVER_OPTIONS, function(connection) {
-      var multiplexStream = new MultiplexStream();
-      connection.pipe(multiplexStream);
-      multiplexStream.pipe(connection);
-      var multiplexedConnection = multiplexStream.createStream();
-      multiplexedConnection.setEncoding();
-      multiplexedConnection.on('data', function(data) {
-        checklist.check(data);
+
+    var upstreamServer = http.createServer();
+    upstreamServer.on('upgrade', function(req, socket, head) {
+      socket.on('end', function() {
+        socket.destroy();
       });
-      multiplexedConnection.on('end', function() {
-        checklist.check('end');
-        connection.end();
+      socket.write('HTTP/1.1 200\r\n' +
+                   'Upgrade: TLS\r\n' +
+                   'Connection: Upgrade\r\n' +
+                   '\r\n');
+                   
+      var securePair = tls.createSecurePair(
+        crypto.createCredentials({
+         key: SERVER_OPTIONS.key,
+         cert: SERVER_OPTIONS.cert,
+         ca: SERVER_OPTIONS.ca
+        }),
+        true,
+        SERVER_OPTIONS.requireCert,
+        SERVER_OPTIONS.rejectUnauthorized
+      );
+      var connection = securePair.cleartext,
+          encrypted = securePair.encrypted;
+
+      socket.pipe(encrypted).pipe(socket);
+
+      securePair.on('secure', function() {
+        var multiplexStream = new MultiplexStream();
+        connection.pipe(multiplexStream).pipe(connection);
+        var multiplexedConnection = multiplexStream.createStream();
+        multiplexedConnection.setEncoding();
+        multiplexedConnection.on('data', function(data) {
+          checklist.check(data);
+        });
+        multiplexedConnection.on('end', function() {
+          checklist.check('end');
+          connection.end();
+        });
+        multiplexedConnection.write('Hello, downstream');
       });
-      multiplexedConnection.write('Hello, downstream');
     });
+
     var downstreamServer = net.createServer(function(connection) {
       checklist.check('connection');
       connection.setEncoding();
@@ -122,6 +153,7 @@ describe('Client', function() {
         connection.end('Hello, upstream');
       });
     });
+
     upstreamServer.listen(UPSTREAM_PORT, function() {
       downstreamServer.listen(DOWNSTREAM_PORT, function() {
         client.connect(function() {
@@ -141,22 +173,48 @@ describe('Client', function() {
   // propagated, perhaps by having the upstream
   // connection emit an error instead of just being
   // ended
-  it.skip('should end muliplexed streams from the upstream server on errors connecting to the downstream server', function(done) {
+  it('should end muliplexed streams from the upstream server on errors connecting to the downstream server', function(done) {
     var client = new Client(CLIENT_UPSTREAM_OPTIONS, CLIENT_DOWNSTREAM_OPTIONS);
     var checklist = new Checklist([
       'end',
       'closed'
     ], done);
-    var upstreamServer = tls.createServer(SERVER_OPTIONS, function(connection) {
-      var multiplexStream = new MultiplexStream();
-      connection.pipe(multiplexStream);
-      multiplexStream.pipe(connection);
-      var multiplexedConnection = multiplexStream.createStream();
-      multiplexedConnection.on('end', function() {
-        checklist.check('end');
-        connection.end();
+    var upstreamServer = http.createServer();
+    upstreamServer.on('upgrade', function(req, socket, head) {
+      socket.on('end', function() {
+        socket.destroy();
       });
-      multiplexedConnection.write('Hello, downstream');
+      socket.write('HTTP/1.1 200\r\n' +
+                   'Upgrade: TLS\r\n' +
+                   'Connection: Upgrade\r\n' +
+                   '\r\n');
+                   
+      var securePair = tls.createSecurePair(
+        crypto.createCredentials({
+         key: SERVER_OPTIONS.key,
+         cert: SERVER_OPTIONS.cert,
+         ca: SERVER_OPTIONS.ca
+        }),
+        true,
+        SERVER_OPTIONS.requireCert,
+        SERVER_OPTIONS.rejectUnauthorized
+      );
+      var connection = securePair.cleartext,
+          encrypted = securePair.encrypted;
+
+      socket.pipe(encrypted).pipe(socket);
+
+      securePair.on('secure', function() {
+        var multiplexStream = new MultiplexStream();
+        connection.pipe(multiplexStream);
+        multiplexStream.pipe(connection);
+        var multiplexedConnection = multiplexStream.createStream();
+        multiplexedConnection.on('end', function() {
+          checklist.check('end');
+          connection.end();
+        });
+        multiplexedConnection.write('Hello, downstream');
+      });
     });
     upstreamServer.listen(UPSTREAM_PORT, function() {
       client.connect(function() {
