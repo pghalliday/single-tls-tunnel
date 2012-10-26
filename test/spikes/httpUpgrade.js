@@ -11,10 +11,8 @@ var PORT = 8080,
     CLIENT_CERT = fs.readFileSync('./test/keys/client-cert.pem');
 
 var httpServer = http.createServer();
-httpServer.on('connection', function(connection) {
-  console.log('connection');
-});
-httpServer.once('upgrade', function(req, socket, head) {
+
+httpServer.on('upgrade', function(req, socket, head) {
   socket.write('HTTP/1.1 200\r\n' +
                'Upgrade: TLS\r\n' +
                'Connection: Upgrade\r\n' +
@@ -46,7 +44,11 @@ httpServer.once('upgrade', function(req, socket, head) {
   });
     
   cleartext.on('end', function() {
-    console.log('end');
+    console.log('end server');
+  });
+
+  socket.on('end', function() {
+    console.log('end server socket');
   });
 });
 
@@ -86,24 +88,21 @@ httpServer.listen(PORT, function() {
       cleartext.write('Hello, server');
     });
 
-    cleartext.setEncoding();
-    cleartext.on('data', function(data) {
-      console.log(data);
-      var connection = net.connect(PORT, function() {
-        connection.write('Hello');
-      });
-      connection.on('error', function(error) {
-        console.log(error);
-      });
-      http.get('http://localhost:' + PORT, function(res) {
-        console.log(res.statusCode);
+    cleartext.on('end', function() {
+      console.log('end client');
+      httpServer.close(function() {
+        console.log('finished');
       });
     });
 
-    cleartext.on('end', function() {
-      server.close(function() {
-        console.log('finished');
-      });
+    cleartext.setEncoding();
+    cleartext.on('data', function(data) {
+      console.log(data);
+      cleartext.end();
+    });
+
+    socket.on('end', function() {
+      console.log('end client socket');
     });
   });
 });
