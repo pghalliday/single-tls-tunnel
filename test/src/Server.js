@@ -1,4 +1,6 @@
 var expect = require('chai').expect,
+    http = require('http'),
+    crypto = require('crypto'),
     tls = require('tls'),
     fs = require('fs'),
     net = require('net'),
@@ -29,17 +31,43 @@ var CLIENT_OPTIONS = {
 };
 
 describe('Server', function() {
-  it('should initially listen on the given port for TLS connections', function(done) {
+  it('should initially listen on the given port for HTTP upgrade requests', function(done) {
     var server = new Server(SERVER_OPTIONS);
     server.listen(PORT, function() {
-      var client = tls.connect(CLIENT_OPTIONS, function() {
-        client.on('end', function() {
+      var request = http.request({
+        port: CLIENT_OPTIONS.port,
+        headers: {
+          'Connection': 'Upgrade',
+          'Upgrade': 'TLS'
+        }
+      });
+      request.on('upgrade', function(res, socket, upgradeHead) {
+        var securePair = tls.createSecurePair(
+         crypto.createCredentials({
+           key: CLIENT_OPTIONS.key,
+           cert: CLIENT_OPTIONS.cert,
+           ca: CLIENT_OPTIONS.ca
+         }),
+         false,
+         true,
+         CLIENT_OPTIONS.rejectUnauthorized
+        );
+        var connection = securePair.cleartext;
+        var encrypted = securePair.encrypted;
+
+        socket.pipe(encrypted).pipe(socket);
+
+        connection.on('end', function() {
           server.close(function() {
             done();
           });
         });
-        client.end();
+
+        securePair.on('secure', function() {
+          connection.end();
+        });
       });
+      request.end();
     });
   });
 
@@ -59,16 +87,41 @@ describe('Server', function() {
   
   describe('once a client is connected', function() {
     var server = new Server(SERVER_OPTIONS),
-        client,
+        connection,
         multiplex;
         
     before(function(done) {
       server.listen(PORT, function() {
-        client = tls.connect(CLIENT_OPTIONS, function() {
-          multiplex = new MultiplexStream();
-          client.pipe(multiplex).pipe(client);
-          done();
+        var request = http.request({
+          port: CLIENT_OPTIONS.port,
+          headers: {
+            'Connection': 'Upgrade',
+            'Upgrade': 'TLS'
+          }
         });
+        request.on('upgrade', function(res, socket, upgradeHead) {
+          var securePair = tls.createSecurePair(
+           crypto.createCredentials({
+             key: CLIENT_OPTIONS.key,
+             cert: CLIENT_OPTIONS.cert,
+             ca: CLIENT_OPTIONS.ca
+           }),
+           false,
+           true,
+           CLIENT_OPTIONS.rejectUnauthorized
+          );
+          connection = securePair.cleartext;
+          var encrypted = securePair.encrypted;
+
+          socket.pipe(encrypted).pipe(socket);
+
+          securePair.on('secure', function() {
+            multiplex = new MultiplexStream();
+            multiplex.pipe(connection).pipe(multiplex);
+            done();
+          });
+        });
+        request.end();
       });   
     });
     
@@ -81,7 +134,7 @@ describe('Server', function() {
         'Goodbye, downstream',
         'end downstream',
         'end upstream'
-      ], function(error) {
+      ], {debug: true}, function(error) {
         multiplex.removeAllListeners('connection');
         done(error);
       });
@@ -117,10 +170,10 @@ describe('Server', function() {
     });
     
     after(function(done) {
-      client.on('end', function() {
+      connection.on('end', function() {
         server.close(done);
       });
-      client.end();
+      connection.end();
     });
   });
 });
