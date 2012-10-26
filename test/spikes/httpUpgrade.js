@@ -13,6 +13,11 @@ var PORT = 8080,
 var httpServer = http.createServer();
 
 httpServer.on('upgrade', function(req, socket, head) {
+  socket.on('end', function() {
+    console.log('end server socket');
+    socket.destroy(); // have to destroy the socket here so the server can be stopped
+  });
+
   socket.write('HTTP/1.1 200\r\n' +
                'Upgrade: TLS\r\n' +
                'Connection: Upgrade\r\n' +
@@ -41,14 +46,6 @@ httpServer.on('upgrade', function(req, socket, head) {
   cleartext.on('data', function(data) {
     console.log(data);
     cleartext.write('Hello, client');
-  });
-    
-  cleartext.on('end', function() {
-    console.log('end server');
-  });
-
-  socket.on('end', function() {
-    console.log('end server socket');
   });
 });
 
@@ -90,7 +87,6 @@ httpServer.listen(PORT, function() {
 
     cleartext.on('end', function() {
       console.log('end client');
-      socket.destroy();
       httpServer.close(function() {
         console.log('finished');
       });
@@ -100,10 +96,6 @@ httpServer.listen(PORT, function() {
     cleartext.on('data', function(data) {
       console.log(data);
       cleartext.end();
-    });
-
-    socket.on('end', function() {
-      console.log('end client socket');
     });
   });
 });
