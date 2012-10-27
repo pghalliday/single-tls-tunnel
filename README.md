@@ -1,10 +1,11 @@
 single-tls-tunnel
-=========
+=================
 
 A single port TLS tunnel implementation to support a single downstream client proxy
 
 ## Features
 
+- should use HTTP for initial client connection and upgrade the socket to a TLS connection
 - should tunnel raw socket traffic
 - should tunnel HTTP traffic
 - should tunnel TLS traffic
@@ -68,7 +69,7 @@ It should be noted that for the client to authorize server certificates they nee
 
 ## Roadmap
 
-- should use HTTP for intial client connection and upgrade the socket to a TLS connection
+- No backlog items
 
 ## Contributing
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using ``./grunt.sh`` or ``.\grunt.bat``.
