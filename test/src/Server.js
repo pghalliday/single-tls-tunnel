@@ -134,7 +134,7 @@ describe('Server', function() {
         'Goodbye, downstream',
         'end downstream',
         'end upstream'
-      ], {debug: true}, function(error) {
+      ], function(error) {
         multiplex.removeAllListeners('connection');
         done(error);
       });
