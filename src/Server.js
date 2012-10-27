@@ -8,11 +8,11 @@ var tls = require('tls'),
 function Server(options) {
   var self = this,
       multiplex,
-      clientConnected = false,
+      tunnelReady = false,
       server = net.createServer();
 
   function onSubsequentConnection(connection) {
-    if (clientConnected) {
+    if (tunnelReady) {
       var tunnel = multiplex.createStream();
       connection.pipe(tunnel).pipe(connection);
     } else {
@@ -24,8 +24,8 @@ function Server(options) {
   function onFirstConnection(connection) {
     // start listening for connections
     server.on('connection', onSubsequentConnection);  
-    // reject connections until client server connection has been secured
-    clientConnected = false;
+    // reject connections until client/server connection has been secured
+    tunnelReady = false;
 
     connection.on('end', function() {
       // stop listening for connections
@@ -53,7 +53,7 @@ function Server(options) {
       securePair.on('secure', function() {
         multiplex = new MultiplexStream();
         multiplex.pipe(securePair.cleartext).pipe(multiplex);
-        clientConnected = true;
+        tunnelReady = true;
       });    
       connection.pipe(securePair.encrypted).pipe(connection);
     });

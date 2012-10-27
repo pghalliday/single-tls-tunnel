@@ -2,6 +2,7 @@
 // Should reject clients that do not request upgrades correctly
 // Should reject unauthorized clients
 // Should accept a new client after a client disconnects
+// Should resist denial of service attacks? (more likley, connection retries blocking client negotiation)
 
 var expect = require('chai').expect,
     http = require('http'),
