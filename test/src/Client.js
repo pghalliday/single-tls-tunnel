@@ -1,6 +1,7 @@
 // TODO:
 // Should reject unauthorized servers
 // Should reject incorrect upgrade response
+// Should retry when connections are ended? (could be due to other connection requests blocking)
 
 var expect = require('chai').expect,
     http = require('http'),
