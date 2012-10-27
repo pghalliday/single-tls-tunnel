@@ -1,5 +1,4 @@
-var http = require('http'),
-    tls = require('tls'),
+var tls = require('tls'),
     crypto = require('crypto'),
     net = require('net'),
     util = require('util'),
@@ -24,25 +23,18 @@ function Server(options) {
 
   function onFirstConnection(connection) {
     // start listening for connections
-    server.on('connection', onSubsequentConnection);
-    
+    server.on('connection', onSubsequentConnection);  
     // reject connections until client server connection has been secured
     clientConnected = false;
 
     connection.on('end', function() {
-      // destroy the socket when it ends, otherwise it will block the server from closing
-      //socket.destroy();
-      
       // stop listening for connections
       server.removeListener('connection', onSubsequentConnection);
-      
       // listen for the next upgrade request from a client
       server.once('connection', onFirstConnection);
     });
 
     connection.once('data', function(data) {
-      // TODO: validate that upgrade request data
-         
       connection.write('HTTP/1.1 200\r\n' +
                        'Upgrade: TLS\r\n' +
                        'Connection: Upgrade\r\n' +
@@ -61,13 +53,11 @@ function Server(options) {
       securePair.on('secure', function() {
         multiplex = new MultiplexStream();
         multiplex.pipe(securePair.cleartext).pipe(multiplex);
-        // ready now
         clientConnected = true;
       });    
       connection.pipe(securePair.encrypted).pipe(connection);
     });
   }
-  
   // start by listening for an upgrade request from a client
   server.once('connection', onFirstConnection);
     

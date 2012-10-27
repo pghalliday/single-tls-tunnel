@@ -1,3 +1,7 @@
+// TODO:
+// Should reject unauthorized servers
+// Should reject incorrect upgrade response
+
 var expect = require('chai').expect,
     http = require('http'),
     crypto = require('crypto'),

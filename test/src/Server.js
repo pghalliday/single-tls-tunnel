@@ -1,3 +1,8 @@
+// TODO:
+// Should reject clients that do not request upgrades correctly
+// Should reject unauthorized clients
+// Should accept a new client after a client disconnects
+
 var expect = require('chai').expect,
     http = require('http'),
     crypto = require('crypto'),
