@@ -13,10 +13,8 @@ var server = http.createServer();
 server.on('upgrade', function(req, socket, head) {
   socket.on('end', function() {
     console.log('server socket ended');
-    // *****************************************************************************************************
-    // Why do I have to destroy the socket here in order to force it to close amd allow the server to stop!!
-    // *****************************************************************************************************
-    socket.destroy();
+    // Have to end the socket here too as HTTP servers allow sockets to be half open
+    socket.end();
   });
 
   socket.write('HTTP/1.1 200\r\n' +

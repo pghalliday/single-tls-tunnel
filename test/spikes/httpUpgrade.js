@@ -15,7 +15,7 @@ var httpServer = http.createServer();
 httpServer.on('upgrade', function(req, socket, head) {
   socket.on('end', function() {
     console.log('end server socket');
-    socket.destroy(); // have to destroy the socket here so the server can be stopped
+    socket.end(); // have to end the socket here so the server can be stopped
   });
 
   socket.write('HTTP/1.1 200\r\n' +
