@@ -1,6 +1,7 @@
 var tls = require('tls'),
     crypto = require('crypto'),
     net = require('net'),
+    http = require('http'),
     util = require('util'),
     EventEmitter = require('events').EventEmitter,
     MultiplexStream = require('multiplex-stream');
@@ -8,58 +9,51 @@ var tls = require('tls'),
 function Server(options) {
   var self = this,
       multiplex,
-      tunnelReady = false,
       server = net.createServer();
 
-  function onSubsequentConnection(connection) {
-    if (tunnelReady) {
-      var tunnel = multiplex.createStream();
-      connection.pipe(tunnel).pipe(connection);
-    } else {
-      // not ready, just end the connection it can retry later if it wants
-      connection.end();
-    }
+  function onConnectionAfterClientAuthenticated(connection) {
+    var tunnel = multiplex.createStream();
+    connection.pipe(tunnel).pipe(connection);
   }  
+      
+  var httpServer = http.createServer(function(request, response) {
+    response.end('Waiting for a client');
+  });
 
-  function onFirstConnection(connection) {
-    // start listening for connections
-    server.on('connection', onSubsequentConnection);  
-    // reject connections until client/server connection has been secured
-    tunnelReady = false;
+  httpServer.on('upgrade', function(request, socket, head) {
+    socket.write('HTTP/1.1 200\r\n' +
+                     'Upgrade: TLS\r\n' +
+                     'Connection: Upgrade\r\n' +
+                     '\r\n');
 
-    connection.on('end', function() {
-      // stop listening for connections
-      server.removeListener('connection', onSubsequentConnection);
-      // listen for the next upgrade request from a client
-      server.once('connection', onFirstConnection);
-    });
+    var securePair = tls.createSecurePair(
+     crypto.createCredentials({
+       key: options.key,
+       cert: options.cert,
+       ca: options.ca
+     }),
+     true,
+     options.requireCert,
+     options.rejectUnauthorized
+    );
+    securePair.on('secure', function() {
+      multiplex = new MultiplexStream();
+      multiplex.pipe(securePair.cleartext).pipe(multiplex);
+      
+      server.removeListener('connection', onConnectionWhileWaitingForClient);
+      server.on('connection', onConnectionAfterClientAuthenticated);  
+      socket.on('end', function() {
+        server.removeListener('connection', onConnectionAfterClientAuthenticated);
+        server.on('connection', onConnectionWhileWaitingForClient);
+      });
+    });    
+    socket.pipe(securePair.encrypted).pipe(socket);    
+  });
 
-    connection.once('data', function(data) {
-      connection.write('HTTP/1.1 200\r\n' +
-                       'Upgrade: TLS\r\n' +
-                       'Connection: Upgrade\r\n' +
-                       '\r\n');
-
-      var securePair = tls.createSecurePair(
-       crypto.createCredentials({
-         key: options.key,
-         cert: options.cert,
-         ca: options.ca
-       }),
-       true,
-       options.requireCert,
-       options.rejectUnauthorized
-      );
-      securePair.on('secure', function() {
-        multiplex = new MultiplexStream();
-        multiplex.pipe(securePair.cleartext).pipe(multiplex);
-        tunnelReady = true;
-      });    
-      connection.pipe(securePair.encrypted).pipe(connection);
-    });
+  function onConnectionWhileWaitingForClient(connection) {
+    httpServer.emit('connection', connection);
   }
-  // start by listening for an upgrade request from a client
-  server.once('connection', onFirstConnection);
+  server.on('connection', onConnectionWhileWaitingForClient);
     
   self.listen = function(port, callback) {
     if (callback) {

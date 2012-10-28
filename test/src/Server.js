@@ -37,6 +37,22 @@ var CLIENT_OPTIONS = {
 };
 
 describe('Server', function() {
+  it('should initially listen on the given port for HTTP GET requests and reply with a status message', function(done) {
+    var server = new Server(SERVER_OPTIONS);
+    server.listen(PORT, function() {
+      http.get('http://localhost:' + PORT, function(response) {
+        expect(response.statusCode).to.equal(200);
+        response.setEncoding();
+        response.on('data', function(data) {
+          expect(data).to.equal('Waiting for a client');
+        });
+        response.on('end', function() {
+          server.close(done);
+        });
+      });
+    });
+  });
+  
   it('should initially listen on the given port for HTTP upgrade requests and upgrade the socket to TLS', function(done) {
     var server = new Server(SERVER_OPTIONS);
     server.listen(PORT, function() {
