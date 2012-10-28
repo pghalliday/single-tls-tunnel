@@ -1,7 +1,7 @@
 {
   "name": "single-tls-tunnel",
   "description": "A single port TLS tunnel implementation to support a single downstream client proxy",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "homepage": "https://github.com/pghalliday/single-tls-tunnel.git",
   "author": {
     "name": "Peter Halliday",
