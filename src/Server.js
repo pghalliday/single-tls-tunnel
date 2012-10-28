@@ -8,8 +8,16 @@ var tls = require('tls'),
 
 function Server(options) {
   var self = this,
-      multiplex,
-      server = net.createServer();
+      multiplex, 
+      connections = [],
+      server = net.createServer({
+        allowHalfOpen: true
+      }, function(connection) {
+        connections.push(connection);
+        connection.on('close', function() {
+          connections.splice(connections.indexOf(connection), 1);
+        });
+      });
 
   function onConnectionAfterClientAuthenticated(connection) {
     var tunnel = multiplex.createStream();
@@ -22,9 +30,9 @@ function Server(options) {
 
   httpServer.on('upgrade', function(request, socket, head) {
     socket.write('HTTP/1.1 200\r\n' +
-                     'Upgrade: TLS\r\n' +
-                     'Connection: Upgrade\r\n' +
-                     '\r\n');
+                 'Upgrade: TLS\r\n' +
+                 'Connection: Upgrade\r\n' +
+                 '\r\n');
 
     var securePair = tls.createSecurePair(
      crypto.createCredentials({
@@ -45,6 +53,7 @@ function Server(options) {
       socket.on('end', function() {
         server.removeListener('connection', onConnectionAfterClientAuthenticated);
         server.on('connection', onConnectionWhileWaitingForClient);
+        socket.end();
       });
     });    
     socket.pipe(securePair.encrypted).pipe(socket);    
@@ -69,6 +78,9 @@ function Server(options) {
   };
   
   self.close = function(callback) {
+    connections.forEach(function(connection) {
+      connection.end();
+    });
     if (callback) {
       self.once('close', callback);
     }
