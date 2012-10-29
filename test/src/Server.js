@@ -1,7 +1,6 @@
 // TODO:
 // Should reject clients that do not request upgrades correctly
 // Should reject unauthorized clients
-// Should accept a new client after a client disconnects
 // Should resist denial of service attacks? (more likely, connection retries blocking client negotiation)
 
 var expect = require('chai').expect,
@@ -12,7 +11,11 @@ var expect = require('chai').expect,
     net = require('net'),
     Checklist = require('checklist'),
     MultiplexStream = require('multiplex-stream'),
-    Server = require('../../src/Server');
+    util = require('util'),
+    EventEmitter = require('events').EventEmitter,
+    Server = require('../../src/Server'),
+    spawn = require('child_process').spawn,
+    MockClient = require('../support/MockClient');
 
 var PORT = 8080,
     SERVER_KEY = fs.readFileSync('./test/keys/server-key.pem'),
@@ -25,7 +28,8 @@ var SERVER_OPTIONS = {
   cert: SERVER_CERT,
   ca: [CLIENT_CERT], 
   requireCert: true,
-  rejectUnauthorized: true
+  rejectUnauthorized: true,
+  timeout: 500
 };
 
 var CLIENT_OPTIONS = {
@@ -56,40 +60,15 @@ describe('Server', function() {
   it('should initially listen on the given port for HTTP upgrade requests and upgrade the socket to TLS', function(done) {
     var server = new Server(SERVER_OPTIONS);
     server.listen(PORT, function() {
-      var request = http.request({
-        port: CLIENT_OPTIONS.port,
-        headers: {
-          'Connection': 'Upgrade',
-          'Upgrade': 'TLS'
-        }
-      });
-      request.on('upgrade', function(res, socket, upgradeHead) {
-        var securePair = tls.createSecurePair(
-         crypto.createCredentials({
-           key: CLIENT_OPTIONS.key,
-           cert: CLIENT_OPTIONS.cert,
-           ca: CLIENT_OPTIONS.ca
-         }),
-         false,
-         true,
-         CLIENT_OPTIONS.rejectUnauthorized
-        );
-        var connection = securePair.cleartext;
-        var encrypted = securePair.encrypted;
-
-        socket.pipe(encrypted).pipe(socket);
-
-        connection.on('end', function() {
-          server.close(function() {
-            done();
-          });
-        });
-
-        securePair.on('secure', function() {
-          connection.end();
+      var client = new MockClient(CLIENT_OPTIONS);
+      client.on('end', function() {
+        server.close(function() {
+          done();
         });
       });
-      request.end();
+      client.connect(function() {
+        client.end();
+      });
     });
   });
 
@@ -107,43 +86,141 @@ describe('Server', function() {
     });
   });
   
-  describe('once a client is connected', function() {
-    var server = new Server(SERVER_OPTIONS),
-        connection,
-        multiplex;
-        
-    before(function(done) {
-      server.listen(PORT, function() {
-        var request = http.request({
-          port: CLIENT_OPTIONS.port,
-          headers: {
-            'Connection': 'Upgrade',
-            'Upgrade': 'TLS'
-          }
-        });
-        request.on('upgrade', function(res, socket, upgradeHead) {
-          var securePair = tls.createSecurePair(
-           crypto.createCredentials({
-             key: CLIENT_OPTIONS.key,
-             cert: CLIENT_OPTIONS.cert,
-             ca: CLIENT_OPTIONS.ca
-           }),
-           false,
-           true,
-           CLIENT_OPTIONS.rejectUnauthorized
-          );
-          connection = securePair.cleartext;
-          var encrypted = securePair.encrypted;
-
-          socket.pipe(encrypted).pipe(socket);
-
-          securePair.on('secure', function() {
-            multiplex = new MultiplexStream();
-            multiplex.pipe(connection).pipe(multiplex);
+  it('should accept a new client after a client disconnects', function(done) {
+    var server = new Server(SERVER_OPTIONS);
+    server.listen(PORT, function() {
+      var client1 = new MockClient(CLIENT_OPTIONS);
+      client1.on('end', function() {
+        var client2 = new MockClient(CLIENT_OPTIONS);
+        client2.on('end', function() {
+          server.close(function() {
             done();
           });
         });
-        request.end();
+        client2.connect(function() {
+          client2.multiplex.on('connection', function(downstreamConnection) {
+            downstreamConnection.setEncoding('utf8');
+            downstreamConnection.on('data', function(data) {
+              downstreamConnection.end('Hello, upstream');
+            });
+            downstreamConnection.on('end', function() {
+            });
+          });
+          var upstreamConnection = net.connect({
+            port: PORT
+          }, function() {
+            upstreamConnection.setEncoding('utf8');
+            upstreamConnection.on('data', function(data) {
+            });
+            upstreamConnection.on('end', function() {
+              client2.end();
+            });
+            upstreamConnection.write('Hello, downstream');
+          });
+        });
+      });
+      client1.connect(function() {
+        client1.multiplex.on('connection', function(downstreamConnection) {
+          downstreamConnection.setEncoding('utf8');
+          downstreamConnection.on('data', function(data) {
+            downstreamConnection.end('Hello, upstream');
+          });
+          downstreamConnection.on('end', function() {
+          });
+        });
+        var upstreamConnection = net.connect({
+          port: PORT
+        }, function() {
+          upstreamConnection.setEncoding('utf8');
+          upstreamConnection.on('data', function(data) {
+          });
+          upstreamConnection.on('end', function() {
+            client1.end();
+          });
+          upstreamConnection.write('Hello, downstream');
+        });
+      });
+    });
+  });
+
+  it('should emit events when clients connect and disconnect', function(done) {
+    var checklist = new Checklist([
+      'connected',
+      'disconnected',
+      'closed'
+    ], done);
+    var server = new Server(SERVER_OPTIONS);
+    server.on('connected', function() {
+      checklist.check('connected');
+    });
+    server.on('disconnected', function() {
+      checklist.check('disconnected');
+    });
+    server.listen(PORT, function() {
+      var client = new MockClient(CLIENT_OPTIONS);
+      client.on('end', function() {
+        server.close(function() {
+          checklist.check('closed');
+        });
+      });
+      client.connect(function() {
+        client.end();
+      });
+    });
+  });
+
+  it('should accept a new client after a client is destroyed', function(done) {
+    var server = new Server(SERVER_OPTIONS);
+    server.on('disconnected', function() {
+      var client2 = new MockClient(CLIENT_OPTIONS);
+      client2.on('end', function() {
+        server.close(function() {
+          done();
+        });
+      });
+      client2.connect(function() {
+        client2.end();
+      });
+    });
+    server.listen(PORT, function() {
+      var client1 = new MockClient(CLIENT_OPTIONS);
+      client1.connect(function() {
+        client1.destroy();
+      });
+    });
+  });
+
+  it('should accept a new client after a client is killed', function(done) {
+    var server = new Server(SERVER_OPTIONS);
+    server.on('disconnected', function() {
+      var client = new MockClient(CLIENT_OPTIONS);
+      client.on('end', function() {
+        server.close(function() {
+          done();
+        });
+      });
+      client.connect(function() {
+        client.end();
+      });
+    });
+    server.listen(PORT, function() {
+      var child = spawn('node', ['./test/support/ClientDeath.js', PORT], {
+        stdio: 'pipe',
+        detached: false
+      });
+      child.stdout.pipe(process.stdout).pipe(child.stdout);
+      child.stderr.pipe(process.stderr).pipe(child.stderr);
+    });
+  });
+
+  describe('once a client is connected', function() {
+    var server = new Server(SERVER_OPTIONS),
+        client;
+        
+    before(function(done) {
+      server.listen(PORT, function() {
+        client = new MockClient(CLIENT_OPTIONS);
+        client.connect(done);
       });   
     });
     
@@ -157,10 +234,10 @@ describe('Server', function() {
         'end downstream',
         'end upstream'
       ], function(error) {
-        multiplex.removeAllListeners('connection');
+        client.multiplex.removeAllListeners('connection');
         done(error);
       });
-      multiplex.on('connection', function(downstreamConnection) {
+      client.multiplex.on('connection', function(downstreamConnection) {
         checklist.check('downstream connected');
         downstreamConnection.setEncoding('utf8');
         downstreamConnection.on('data', function(data) {
@@ -192,10 +269,10 @@ describe('Server', function() {
     });
     
     after(function(done) {
-      connection.on('end', function() {
+      client.on('end', function() {
         server.close(done);
       });
-      connection.end();
+      client.end();
     });
   });
 });

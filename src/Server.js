@@ -29,7 +29,7 @@ function Server(options) {
   });
 
   httpServer.on('upgrade', function(request, socket, head) {
-    socket.write('HTTP/1.1 200\r\n' +
+    socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
                  'Upgrade: TLS\r\n' +
                  'Connection: Upgrade\r\n' +
                  '\r\n');
@@ -49,12 +49,25 @@ function Server(options) {
       multiplex.pipe(securePair.cleartext).pipe(multiplex);
       
       server.removeListener('connection', onConnectionWhileWaitingForClient);
-      server.on('connection', onConnectionAfterClientAuthenticated);  
+      server.on('connection', onConnectionAfterClientAuthenticated);
+
+      var disconnected = false;
+      function disconnect() {
+        if (!disconnected) {
+          disconnected = true;
+          server.removeListener('connection', onConnectionAfterClientAuthenticated);
+          server.on('connection', onConnectionWhileWaitingForClient);
+          self.emit('disconnected');
+        }
+      }
+      socket.on('close', function() {
+        disconnect();
+      });
       socket.on('end', function() {
-        server.removeListener('connection', onConnectionAfterClientAuthenticated);
-        server.on('connection', onConnectionWhileWaitingForClient);
+        disconnect();
         socket.end();
       });
+      self.emit('connected');
     });    
     socket.pipe(securePair.encrypted).pipe(socket);    
   });

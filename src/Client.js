@@ -13,10 +13,11 @@ function Client(upstreamOptions, downstreamOptions) {
   
   self.connect = function(callback) {
     var options = {
+      host: upstreamOptions.host,
       port: upstreamOptions.port,
       headers: {
         'Connection': 'Upgrade',
-        'Upgrade': 'TLS'
+        'Upgrade': 'websocket'
       }
     };
 
@@ -36,7 +37,6 @@ function Client(upstreamOptions, downstreamOptions) {
        upstreamOptions.rejectUnauthorized
       );
       connection = securePair.cleartext;
-      var encrypted = securePair.encrypted;
 
       connection.on('error', function(error) {
         connection = null;
@@ -47,29 +47,28 @@ function Client(upstreamOptions, downstreamOptions) {
         self.emit('end');
       });
 
-      socket.pipe(encrypted).pipe(socket);
-
-      var multiplexStream = new MultiplexStream(function(upstreamConnection) {
-        var valve = new Valve(upstreamConnection, {paused: true});
-        var downstreamConnection = net.connect(downstreamOptions, function() {
-          valve.pipe(downstreamConnection);
-          downstreamConnection.pipe(upstreamConnection);
-          valve.resume();
-        });
-        downstreamConnection.on('error', function(error) {
-          upstreamConnection.end();
-        });
-      });
-
-      connection.pipe(multiplexStream).pipe(connection);
+      socket.pipe(securePair.encrypted).pipe(socket);
 
       securePair.on('error', function(error) {
         connection = null;
         self.emit('error', error);
       });
       securePair.on('secure', function() {
+        socket.setKeepAlive(true);
+        var multiplexStream = new MultiplexStream(function(upstreamConnection) {
+          var valve = new Valve(upstreamConnection, {paused: true});
+          var downstreamConnection = net.connect(downstreamOptions, function() {
+            valve.pipe(downstreamConnection);
+            downstreamConnection.pipe(upstreamConnection);
+            valve.resume();
+          });
+          downstreamConnection.on('error', function(error) {
+            upstreamConnection.end();
+          });
+        });
+        connection.pipe(multiplexStream).pipe(connection);
         if (callback) {
-          self.on('connect', callback);
+          self.once('connect', callback);
         }
         self.emit('connect');
       });

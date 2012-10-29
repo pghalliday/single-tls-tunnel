@@ -53,8 +53,8 @@ describe('Client', function() {
       socket.on('end', function() {
         socket.destroy();
       });
-      socket.write('HTTP/1.1 200\r\n' +
-                   'Upgrade: TLS\r\n' +
+      socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
+                   'Upgrade: websocket\r\n' +
                    'Connection: Upgrade\r\n' +
                    '\r\n');
                    
