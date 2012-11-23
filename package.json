@@ -29,7 +29,7 @@
     "test": "grunt"
   },
   "dependencies": {
-    "multiplex-stream": "0.0.2",
+    "multiplex-stream": "1.0.0",
     "pipette": "~0.9.1"
   },
   "devDependencies": {
