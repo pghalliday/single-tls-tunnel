@@ -4,6 +4,7 @@ var tls = require('tls'),
     http = require('http'),
     util = require('util'),
     EventEmitter = require('events').EventEmitter,
+    Valve = require('pipette').Valve,
     MultiplexStream = require('multiplex-stream');
 
 function Server(options) {
@@ -20,8 +21,15 @@ function Server(options) {
       });
 
   function onConnectionAfterClientAuthenticated(connection) {
-    var tunnel = multiplex.createStream();
-    connection.pipe(tunnel).pipe(connection);
+    // this is required as the server allows connections to be half open
+    connection.on('end', function() {
+      connection.end();
+    });
+    var valve = new Valve(connection, {paused: true});
+    var tunnel = multiplex.connect(function() {
+      valve.pipe(tunnel).pipe(connection);
+      valve.resume();
+    });
   }  
       
   var httpServer = http.createServer(function(request, response) {

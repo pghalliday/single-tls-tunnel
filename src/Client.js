@@ -58,8 +58,7 @@ function Client(upstreamOptions, downstreamOptions) {
         var multiplexStream = new MultiplexStream(function(upstreamConnection) {
           var valve = new Valve(upstreamConnection, {paused: true});
           var downstreamConnection = net.connect(downstreamOptions, function() {
-            valve.pipe(downstreamConnection);
-            downstreamConnection.pipe(upstreamConnection);
+            valve.pipe(downstreamConnection).pipe(upstreamConnection);
             valve.resume();
           });
           downstreamConnection.on('error', function(error) {

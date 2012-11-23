@@ -239,6 +239,9 @@ describe('Server', function() {
       });
       client.multiplex.on('connection', function(downstreamConnection) {
         checklist.check('downstream connected');
+        downstreamConnection.on('end', function() {
+          checklist.check('end downstream');
+        });
         downstreamConnection.setEncoding('utf8');
         downstreamConnection.on('data', function(data) {
           checklist.check(data);
@@ -248,21 +251,18 @@ describe('Server', function() {
           });
           downstreamConnection.write('Hello, upstream');
         });
-        downstreamConnection.on('end', function() {
-          checklist.check('end downstream');
-        });
       });
       var upstreamConnection = net.connect({
         port: PORT
       }, function() {
         checklist.check('upstream connected');
+        upstreamConnection.on('end', function() {
+          checklist.check('end upstream');
+        });
         upstreamConnection.setEncoding('utf8');
         upstreamConnection.on('data', function(data) {
           checklist.check(data);
           upstreamConnection.end('Goodbye, downstream');
-        });
-        upstreamConnection.on('end', function() {
-          checklist.check('end upstream');
         });
         upstreamConnection.write('Hello, downstream');
       });

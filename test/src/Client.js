@@ -137,16 +137,17 @@ describe('Client', function() {
       securePair.on('secure', function() {
         var multiplexStream = new MultiplexStream();
         connection.pipe(multiplexStream).pipe(connection);
-        var multiplexedConnection = multiplexStream.createStream();
-        multiplexedConnection.setEncoding();
-        multiplexedConnection.on('data', function(data) {
-          checklist.check(data);
+        var multiplexedConnection = multiplexStream.connect(function() {
+          multiplexedConnection.setEncoding();
+          multiplexedConnection.on('data', function(data) {
+            checklist.check(data);
+          });
+          multiplexedConnection.on('end', function() {
+            checklist.check('end');
+            connection.end();
+          });
+          multiplexedConnection.write('Hello, downstream');
         });
-        multiplexedConnection.on('end', function() {
-          checklist.check('end');
-          connection.end();
-        });
-        multiplexedConnection.write('Hello, downstream');
       });
     });
 
@@ -213,12 +214,13 @@ describe('Client', function() {
         var multiplexStream = new MultiplexStream();
         connection.pipe(multiplexStream);
         multiplexStream.pipe(connection);
-        var multiplexedConnection = multiplexStream.createStream();
-        multiplexedConnection.on('end', function() {
-          checklist.check('end');
-          connection.end();
+        var multiplexedConnection = multiplexStream.connect(function() {
+          multiplexedConnection.on('end', function() {
+            checklist.check('end');
+            connection.end();
+          });
+          multiplexedConnection.write('Hello, downstream');
         });
-        multiplexedConnection.write('Hello, downstream');
       });
     });
     upstreamServer.listen(UPSTREAM_PORT, function() {
