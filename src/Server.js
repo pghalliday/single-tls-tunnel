@@ -38,7 +38,7 @@ function Server(options) {
 
   httpServer.on('upgrade', function(request, socket, head) {
     socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
-                 'Upgrade: TLS\r\n' +
+                 'Upgrade: websocket\r\n' +
                  'Connection: Upgrade\r\n' +
                  '\r\n');
 
