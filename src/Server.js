@@ -9,10 +9,22 @@ var tls = require('tls'),
 
 function Server(options) {
   var self = this,
-      multiplex,
-      server = net.createServer();
+      multiplex, 
+      connections = [],
+      server = net.createServer({
+        allowHalfOpen: true
+      }, function(connection) {
+        connections.push(connection);
+        connection.on('close', function() {
+          connections.splice(connections.indexOf(connection), 1);
+        });
+      });
 
   function onConnectionAfterClientAuthenticated(connection) {
+    // this is required as the server allows connections to be half open
+    connection.on('end', function() {
+      connection.end();
+    });
     var valve = new Valve(connection, {paused: true});
     var tunnel = multiplex.connect(function() {
       valve.pipe(tunnel).pipe(connection);
@@ -25,10 +37,10 @@ function Server(options) {
   });
 
   httpServer.on('upgrade', function(request, socket, head) {
-    socket.write('HTTP/1.1 200\r\n' +
-                     'Upgrade: TLS\r\n' +
-                     'Connection: Upgrade\r\n' +
-                     '\r\n');
+    socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
+                 'Upgrade: websocket\r\n' +
+                 'Connection: Upgrade\r\n' +
+                 '\r\n');
 
     var securePair = tls.createSecurePair(
      crypto.createCredentials({
@@ -45,11 +57,25 @@ function Server(options) {
       multiplex.pipe(securePair.cleartext).pipe(multiplex);
       
       server.removeListener('connection', onConnectionWhileWaitingForClient);
-      server.on('connection', onConnectionAfterClientAuthenticated);  
-      socket.on('end', function() {
-        server.removeListener('connection', onConnectionAfterClientAuthenticated);
-        server.on('connection', onConnectionWhileWaitingForClient);
+      server.on('connection', onConnectionAfterClientAuthenticated);
+
+      var disconnected = false;
+      function disconnect() {
+        if (!disconnected) {
+          disconnected = true;
+          server.removeListener('connection', onConnectionAfterClientAuthenticated);
+          server.on('connection', onConnectionWhileWaitingForClient);
+          self.emit('disconnected');
+        }
+      }
+      socket.on('close', function() {
+        disconnect();
       });
+      socket.on('end', function() {
+        disconnect();
+        socket.end();
+      });
+      self.emit('connected');
     });    
     socket.pipe(securePair.encrypted).pipe(socket);    
   });
@@ -73,6 +99,9 @@ function Server(options) {
   };
   
   self.close = function(callback) {
+    connections.forEach(function(connection) {
+      connection.end();
+    });
     if (callback) {
       self.once('close', callback);
     }
